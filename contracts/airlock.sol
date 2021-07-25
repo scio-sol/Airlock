@@ -83,14 +83,16 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
 
     function finishTransaction(uint256 _id) public {
 
-        require(msg.sender == transactions[_id].origin ||
-                msg.sender == transactions[_id].destination, "Not autorized");
-        require(block.timestamp >= transactions[_id].maturity, "Transaction has not yet reached maturity");
-        require(!transactions[_id].paid && !transactions[_id].reversed, "Transaction was resolved already");
+        transaction memory t = transactions[_id];
+
+        require(msg.sender == t.origin ||
+                msg.sender == t.destination, "Not autorized");
+        require(block.timestamp >= t.maturity, "Transaction has not yet reached maturity");
+        require(!t.paid && !t.reversed, "Transaction was resolved already");
 
         transactions[_id].paid = true;
 
-        transactions[_id].destination.transfer(transactions[_id].amount);
+        t.destination.transfer(t.amount);
 
     }
 
