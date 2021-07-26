@@ -18,7 +18,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
 
     uint256 private devMoney;
     uint256 public fee;
-    uint256 public minDelay;
+    uint256 public delay;
     uint256 private nonce;
     mapping ( address => uint256[] ) private idByOrigin;
     mapping ( address => uint256[] ) private idByDestination;
@@ -26,7 +26,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
 
     constructor() {
         fee = 10 ** 15;
-        minDelay = 24 * 3600;
+        delay = 24 * 3600;
         nonce = 1024;
     }
 
@@ -34,8 +34,8 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
         fee = _amount;
     }
 
-    function setMinDelay(uint256 _amount) external isDeveloper {
-        minDelay = _amount;
+    function setDelay(uint256 _amount) external isDeveloper {
+        delay = _amount;
     }
 
     function getDevMoney() external view isDeveloper returns (uint256) {
@@ -48,10 +48,9 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
         msg.sender.transfer(_amount);
     }
 
-    function createTransaction(address payable _destination, uint256 delay) public payable {
+    function createTransaction(address payable _destination) public payable {
 
         require(msg.value > fee, "Transaction amount is too small to cover the fees");
-        require(delay >= minDelay, "Transaction delay is smaller than the minimum");
         require(_destination != address(0), "It is not allowed to send transactions to address(0)"); // Likely a mistake by the user
         require(_destination != msg.sender, "It is not allowed to send transactions with the sender as destination"); // Likely a mistake by the user
         require(_destination != address(this), "It is not allowed to send transactions with this contract as destination"); // No way to recover this funds
