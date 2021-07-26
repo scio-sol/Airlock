@@ -3,25 +3,17 @@
 pragma solidity ^0.7.3;
 
 contract RestrictedAccessContract {
-    address payable private developer;
+    address payable internal developer;
 
     event OwnerSet(address indexed oldDev, address indexed newDev);
 
     modifier isDeveloper() {
-        require(msg.sender == developer, "Access denied: not the dev");
+        require(msg.sender == developer, "Access restricted to the developer");
         _;
     }
 
     constructor() {
         developer = msg.sender;
-    }
-
-    function amITheDev() public view returns (bool) {
-        return developer == msg.sender;
-    }
-
-    function getDev() public view returns (address) {
-        return developer;
     }
 
     function changeDev(address payable _newDev) public isDeveloper {
