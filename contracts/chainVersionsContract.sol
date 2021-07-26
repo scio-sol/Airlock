@@ -5,28 +5,16 @@ pragma solidity ^0.7.3;
 import "./restrictedAccessContract.sol";
 
 contract ChainVersionsContract is RestrictedAccessContract {
-    bool private broken;
-    address private next;
+    bool public broken;
+    address public nextVersion;
 
     constructor() {
-        next = address(0);
-    }
-
-    function nextVersion() public view returns (address) {
-        return next;
-    }
-
-    function isBroken() public view returns (bool) {
-        return broken;
-    }
-
-    function isLatest() public view returns (bool) {
-        return next == address(0);
+        nextVersion = address(0);
     }
 
     function setNextVersion(address _contract) public isDeveloper {
-        require(isLatest(), "Chain of versions is immutable");
-        next = _contract;
+        require(nextVersion == address(0), "Chain of versions is immutable");
+        nextVersion = _contract;
     }
 
     function setBroken() public isDeveloper {

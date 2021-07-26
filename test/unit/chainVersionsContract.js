@@ -17,17 +17,12 @@ describe("Chained Versions contract", async function() {
     });
 
     it("Should not tell us that it is broken by default", async () => {
-        expect(await contract.isBroken()).to.false;
-    });
-
-    it("Should tell us that it is the latest by default", async () => {
-        expect(await contract.isLatest()).to.true;
+        expect(await contract.broken()).to.false;
     });
 
     it("Should allow us to set next if it is the latest and we are the owner", async () => {
         var contract2 = await factory.deploy();
         await expect(contract.setNextVersion(contract2.address)).to.not.be.reverted;
-        expect(await contract.isLatest()).to.false;
         expect(await contract.nextVersion()).to.equal(contract2.address);
     });
 
@@ -45,11 +40,11 @@ describe("Chained Versions contract", async function() {
 
     it("Should allow us to set broken by default", async () => {
         await expect(contract.setBroken()).to.not.be.reverted;
-        expect(await contract.isBroken()).to.true;
+        expect(await contract.broken()).to.true;
     });
 
     it("Should not allow us to set broken if we are not the owners", async () => {
         await expect(contract.connect(addr2).setBroken()).to.be.reverted;
-        expect(await contract.isBroken()).to.false;
+        expect(await contract.broken()).to.false;
     });
 });

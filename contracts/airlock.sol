@@ -51,6 +51,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
     function createTransaction(address payable _destination) public payable {
 
         require(msg.value > fee, "Transaction amount is too small to cover the fees");
+        require(!broken, "This version of Airlock is considered broken (or vulnerable) and will not accept any new transactions");
         require(_destination != address(0), "It is not allowed to send transactions to address(0)"); // Likely a mistake by the user
         require(_destination != msg.sender, "It is not allowed to send transactions with the sender as destination"); // Likely a mistake by the user
         require(_destination != address(this), "It is not allowed to send transactions with this contract as destination"); // No way to recover this funds
