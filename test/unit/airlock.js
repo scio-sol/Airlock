@@ -238,6 +238,16 @@ describe("Airlock contract", async function() {
                 expect(bal).to.equal(0);
 
             });
+
+            it("Should not work anymore with broken==true", async () => {
+
+                var newContract = await factory.deploy();
+
+                await newContract.setBroken();
+
+                await expect(newContract.connect(bobby).createTransaction(alice.address, options)).to.be.reverted;
+
+            });
         });
 
         describe("Reversing transactions", async () => {
@@ -345,6 +355,18 @@ describe("Airlock contract", async function() {
 
                 await expect(contractWithDelaysDone.connect(bobby).finishTransaction(n)).to.not.be.reverted;
                 await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.be.reverted;
+
+            });
+
+            it("Should still work with broken==true", async () => {
+
+                var newContract = await factory.deploy();
+
+                await newContract.connect(bobby).createTransaction(alice.address, options);
+
+                await newContract.setBroken();
+
+                await expect(newContract.connect(bobby).reverseTransaction(1024)).to.not.be.reverted;
 
             });
 
@@ -457,6 +479,19 @@ describe("Airlock contract", async function() {
             it("Should refuse to finish a transaction that was reversed", async () => {
 
                 await expect(contractWithDelaysDone.connect(alice).finishTransaction(reversedAndThenMature)).to.be.revertedWith("Transaction was resolved already");
+
+            });
+
+            it("Should still work with broken==true", async () => {
+
+                var newContract = await factory.deploy();
+
+                await newContract.setDelay(0);
+                await newContract.connect(bobby).createTransaction(alice.address, options);
+
+                await newContract.setBroken();
+
+                await expect(newContract.connect(bobby).finishTransaction(1024)).to.not.be.reverted;
 
             });
 
@@ -772,6 +807,7 @@ describe("Airlock contract", async function() {
                 expect(reversed).to.be.false;
 
             });
+
         });
     });
 
