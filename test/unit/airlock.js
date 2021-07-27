@@ -7,6 +7,7 @@ describe("Airlock contract", async function() {
     var owner, bobby, alice, addrs;
     var options;
     var nextReady, nextId;
+    var reversedAndThenMature;
 
     this.beforeAll(async () => {
         factory = await ethers.getContractFactory("Airlock");
@@ -19,6 +20,10 @@ describe("Airlock contract", async function() {
         {
             await contractWithDelaysDone.connect(bobby).createTransaction(alice.address, options);
         }
+        reversedAndThenMature = 1074;
+        await contractWithDelaysDone.setDelay(2);
+        await contractWithDelaysDone.connect(bobby).createTransaction(alice.address, options);
+        await contractWithDelaysDone.connect(bobby).reverseTransaction(reversedAndThenMature);
 
         await contractWithDelaysDone.setDelay(24 * 3600);
         await new Promise(resolve => {
@@ -26,7 +31,7 @@ describe("Airlock contract", async function() {
         });
 
         nextReady = 1024;
-        nextId = 1074;
+        nextId = 1075;
 
     });
 
@@ -288,7 +293,7 @@ describe("Airlock contract", async function() {
                 var n = nextReady;
                 nextReady++;
 
-                await expect(contractWithDelaysDone.connect(bobby).reverseTransaction(n)).to.be.revertedWith("Not autorized for reversal");
+                await expect(contractWithDelaysDone.connect(bobby).reverseTransaction(n)).to.be.revertedWith("Transaction has already reached maturity");
 
             });
 
@@ -300,12 +305,12 @@ describe("Airlock contract", async function() {
 
             });
 
-            it("Should reverse a transaction when called by the receiver after maturity", async () => {
+            it("Should refuse to reverse a transaction when called by the sender after maturity", async () => {
 
                 var n = nextReady;
                 nextReady++;
 
-                await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.not.be.reverted;
+                await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.be.revertedWith("Transaction has already reached maturity");
 
             });
 
@@ -313,14 +318,14 @@ describe("Airlock contract", async function() {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                await expect(contract.connect(addrs[0]).reverseTransaction(1024)).to.be.revertedWith("Not autorized for reversal");
+                await expect(contract.connect(addrs[0]).reverseTransaction(1024)).to.be.revertedWith("Not autorized");
             });
 
             it("Should especially refuse to reverse a transaction when called by the developer", async () => {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                await expect(contract.reverseTransaction(1024)).to.be.revertedWith("Not autorized for reversal");
+                await expect(contract.reverseTransaction(1024)).to.be.revertedWith("Not autorized");
 
             });
 
@@ -328,8 +333,8 @@ describe("Airlock contract", async function() {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                await expect(contract.connect(alice).reverseTransaction(1024)).to.not.be.reverted;
-                await expect(contract.connect(alice).reverseTransaction(1024)).to.be.revertedWith("Transaction was resolved already");
+                await expect(contract.connect(bobby).reverseTransaction(1024)).to.not.be.reverted;
+                await expect(contract.connect(alice).reverseTransaction(1024)).to.be.reverted;
 
             });
 
@@ -338,8 +343,8 @@ describe("Airlock contract", async function() {
                 var n = nextReady;
                 nextReady++;
 
-                await expect(contractWithDelaysDone.connect(alice).finishTransaction(n)).to.not.be.reverted;
-                await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.be.revertedWith("Transaction was resolved already");
+                await expect(contractWithDelaysDone.connect(bobby).finishTransaction(n)).to.not.be.reverted;
+                await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.be.reverted;
 
             });
 
@@ -451,12 +456,7 @@ describe("Airlock contract", async function() {
 
             it("Should refuse to finish a transaction that was reversed", async () => {
 
-                var n = nextReady;
-                nextReady++;
-
-                await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.not.be.reverted;
-
-                await expect(contractWithDelaysDone.connect(alice).finishTransaction(n)).to.be.revertedWith("Transaction was resolved already");
+                await expect(contractWithDelaysDone.connect(alice).finishTransaction(reversedAndThenMature)).to.be.revertedWith("Transaction was resolved already");
 
             });
 
@@ -614,7 +614,7 @@ describe("Airlock contract", async function() {
 
                 var [o1, i1] = await contractWithDelaysDone.connect(bobby).myTransactions();
 
-                expect(o1.length).to.be.equal(50);
+                expect(o1.length).to.be.equal(nextId - 1024);
                 expect(o1[n - 1024]).to.be.equal(n);
 
             });
@@ -627,7 +627,7 @@ describe("Airlock contract", async function() {
                 await contractWithDelaysDone.connect(bobby).finishTransaction(n);
                 var [o1, i1] = await contractWithDelaysDone.connect(bobby).myTransactions();
 
-                expect(o1.length).to.be.equal(50);
+                expect(o1.length).to.be.equal(nextId - 1024);
                 expect(o1[n - 1024]).to.be.equal(n);
 
             });

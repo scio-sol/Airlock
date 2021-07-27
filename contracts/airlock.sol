@@ -70,14 +70,16 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
 
     function reverseTransaction(uint256 _id) public {
 
-        require((msg.sender == transactions[_id].origin && block.timestamp < transactions[_id].maturity) || 
-                (msg.sender == transactions[_id].destination),
-                "Not autorized for reversal");
-        require(!transactions[_id].paid && !transactions[_id].reversed, "Transaction was resolved already");
+        transaction memory t = transactions[_id];
+
+        require(msg.sender == t.origin ||
+                msg.sender == t.destination, "Not autorized");
+        require(block.timestamp < t.maturity, "Transaction has already reached maturity");
+        require(!t.paid && !t.reversed, "Transaction was resolved already");
 
         transactions[_id].reversed = true;
 
-        transactions[_id].origin.transfer(transactions[_id].amount);
+        t.origin.transfer(t.amount);
 
     }
 
