@@ -190,16 +190,14 @@ describe("Airlock contract", async function() {
             it("Should set both indices correctly", async () => {
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                [os, is] = await contract.connect(bobby).myTransactions();
-                [od, id] = await contract.connect(alice).myTransactions();
+                [id] = await contract.connect(bobby).myTransactions();
+                [id_alice_pov] = await contract.connect(alice).myTransactions();
 
-                expect(os.length).to.equal(1);
-                expect(is.length).to.equal(0);
-                expect(os[0]).to.equal(1024);
-
-                expect(od.length).to.equal(0);
                 expect(id.length).to.equal(1);
                 expect(id[0]).to.equal(1024);
+
+                expect(id_alice_pov.length).to.equal(1);
+                expect(id_alice_pov[0]).to.equal(1024);
             });
 
             it("Should add the fee to the devMoney", async () => {
@@ -499,171 +497,127 @@ describe("Airlock contract", async function() {
 
         describe("Viewing transactions", async () => {
 
-            it("Should return the new transaction when called from the sender", async () => {
+            it("Should return all transactions when myTransactions called", async () => {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                var [o1, i1] = await contract.connect(bobby).myTransactions();
+                var [id, origin, destination, maturity, amount, paid, reversed] = await contract.connect(bobby).myTransactions();
 
-                expect(o1).to.not.be.undefined;
-                expect(o1.length).to.be.equal(1);
-                expect(o1[0]).to.be.equal(1024);
-                
-                expect(i1).to.not.be.undefined;
-                expect(i1.length).to.be.equal(0);
+                expect(id).to.not.be.undefined;
+                expect(id.length).to.be.equal(1);
+                expect(id[0]).to.be.equal(1024);
 
+                expect(origin).to.not.be.undefined;
+                expect(origin.length).to.be.equal(1);
+                expect(origin[0]).to.be.equal(bobby.address);
+
+                expect(destination).to.not.be.undefined;
+                expect(destination.length).to.be.equal(1);
+                expect(destination[0]).to.be.equal(alice.address);
+
+                expect(maturity).to.not.be.undefined;
+                expect(maturity.length).to.be.equal(1);
+                var block = await ethers.provider.getBlock();
+                expect(maturity[0]).to.be.closeTo(ethers.BigNumber.from(24 * 3600).add(block.timestamp), 1000);
+
+                expect(amount).to.not.be.undefined;
+                expect(amount.length).to.be.equal(1);
+                expect(amount[0]).to.be.equal(options.value.sub(await contract.fee()));
+
+                expect(paid).to.not.be.undefined;
+                expect(paid.length).to.be.equal(1);
+                expect(paid[0]).to.be.equal(false);
+
+                expect(reversed).to.not.be.undefined;
+                expect(reversed.length).to.be.equal(1);
+                expect(reversed[0]).to.be.equal(false);
                 
                 await contract.connect(bobby).createTransaction(alice.address, options);
                 await contract.connect(alice).createTransaction(bobby.address, options);
 
-                [o1, i1] = await contract.connect(bobby).myTransactions();
+                [, origin, , , , , ] = await contract.connect(bobby).myTransactions();
 
-                expect(o1).to.not.be.undefined;
-                expect(o1.length).to.be.equal(2);
-                expect(o1[0]).to.be.equal(1024);
-                expect(o1[1]).to.be.equal(1025);
-                
-                expect(i1).to.not.be.undefined;
-                expect(i1.length).to.be.equal(1);
-                expect(i1[0]).to.be.equal(1026);
+                expect(origin).to.not.be.undefined;
+                expect(origin.length).to.be.equal(3);
+                expect(origin[0]).to.be.equal(bobby.address);
+                expect(origin[1]).to.be.equal(bobby.address);
+                expect(origin[2]).to.be.equal(alice.address);
 
             });
 
-            it("Should not modify the other array", async () => {
+            it("Should not return any transaction when myTransactions called from a third party", async () => {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                var [o1, i1] = await contract.connect(bobby).myTransactions();
+                var [, origin] = await contract.connect(addrs[0]).myTransactions();
 
-                expect(o1.length).to.be.equal(1);
-                expect(o1[0]).to.be.equal(1024);
-
+                expect(origin).to.not.be.undefined;
+                expect(origin.length).to.be.equal(0);
+                
+                await contract.connect(bobby).createTransaction(alice.address, options);
                 await contract.connect(alice).createTransaction(bobby.address, options);
-                await contract.connect(alice).createTransaction(bobby.address, options);
 
-                [o1, i1] = await contract.connect(bobby).myTransactions();
+                [, origin] = await contract.connect(addrs[0]).myTransactions();
 
-                expect(o1.length).to.be.equal(1);
-                expect(o1[0]).to.be.equal(1024);
+                expect(origin).to.not.be.undefined;
+                expect(origin.length).to.be.equal(0);
 
             });
 
-            it("Should return the new transaction when called from the receiver", async () => {
-                
+            it("Should not return any transaction when myTransactions called from the developer", async () => {
+
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                var [o1, i1] = await contract.connect(alice).myTransactions();
+                var [, origin] = await contract.myTransactions();
 
-                expect(i1).to.not.be.undefined;
-                expect(i1.length).to.be.equal(1);
-                expect(i1[0]).to.be.equal(1024);
-                
-                expect(o1).to.not.be.undefined;
-                expect(o1.length).to.be.equal(0);
-
+                expect(origin).to.not.be.undefined;
+                expect(origin.length).to.be.equal(0);
                 
                 await contract.connect(bobby).createTransaction(alice.address, options);
                 await contract.connect(alice).createTransaction(bobby.address, options);
 
-                [o1, i1] = await contract.connect(alice).myTransactions();
+                [, origin] = await contract.myTransactions();
 
-                expect(i1).to.not.be.undefined;
-                expect(i1.length).to.be.equal(2);
-                expect(i1[0]).to.be.equal(1024);
-                expect(i1[1]).to.be.equal(1025);
-                
-                expect(o1).to.not.be.undefined;
-                expect(o1.length).to.be.equal(1);
-                expect(o1[0]).to.be.equal(1026);
+                expect(origin).to.not.be.undefined;
+                expect(origin.length).to.be.equal(0);
 
             });
 
-            it("Should not return the new transaction when called from a third party", async () => {
-
-                await contract.connect(bobby).createTransaction(alice.address, options);
-
-                var [o1, i1] = await contract.connect(addrs[0]).myTransactions();
-
-                expect(i1).to.not.be.undefined;
-                expect(i1.length).to.be.equal(0);
-                
-                expect(o1).to.not.be.undefined;
-                expect(o1.length).to.be.equal(0);
-
-                
-                await contract.connect(bobby).createTransaction(alice.address, options);
-                await contract.connect(alice).createTransaction(bobby.address, options);
-
-                [o1, i1] = await contract.connect(addrs[0]).myTransactions();
-
-                expect(i1).to.not.be.undefined;
-                expect(i1.length).to.be.equal(0);
-                
-                expect(o1).to.not.be.undefined;
-                expect(o1.length).to.be.equal(0);
-
-            });
-
-            it("Should not return the new transaction when called from the developer", async () => {
-
-                await contract.connect(bobby).createTransaction(alice.address, options);
-
-                var [o1, i1] = await contract.myTransactions();
-
-                expect(i1).to.not.be.undefined;
-                expect(i1.length).to.be.equal(0);
-                
-                expect(o1).to.not.be.undefined;
-                expect(o1.length).to.be.equal(0);
-
-                
-                await contract.connect(bobby).createTransaction(alice.address, options);
-                await contract.connect(alice).createTransaction(bobby.address, options);
-
-                [o1, i1] = await contract.myTransactions();
-
-                expect(i1).to.not.be.undefined;
-                expect(i1.length).to.be.equal(0);
-                
-                expect(o1).to.not.be.undefined;
-                expect(o1.length).to.be.equal(0);
-
-            });
-
-            it("Should still return the transaction when reversed", async () => {
+            it("Should still return the transaction when reversed and myTransactions called", async () => {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
                 await expect(contract.connect(bobby).reverseTransaction(1024)).to.not.be.reverted;
 
-                var [o1, i1] = await contract.connect(bobby).myTransactions();
+                var [, , , , , , reversed] = await contract.connect(bobby).myTransactions();
 
-                expect(o1.length).to.be.equal(1);
-                expect(o1[0]).to.be.equal(1024);
+                expect(reversed.length).to.be.equal(1);
+                expect(reversed[0]).to.be.true;
 
             });
 
-            it("Should still return the transaction when ready to finish", async () => {
+            it("Should still return the transaction when ready to finish and myTransactions called", async () => {
                 
                 var n = nextReady;
                 nextReady++;
 
-                var [o1, i1] = await contractWithDelaysDone.connect(bobby).myTransactions();
+                var [, , , , , paid, reversed] = await contractWithDelaysDone.connect(bobby).myTransactions();
 
-                expect(o1.length).to.be.equal(nextId - 1024);
-                expect(o1[n - 1024]).to.be.equal(n);
+                expect(paid.length).to.be.equal(nextId - 1024);
+                expect(paid[n - 1024]).to.be.false;
+                expect(reversed[n - 1024]).to.be.false;
 
             });
 
-            it("Should still return the transaction when finished", async () => {
+            it("Should still return the transaction when finished and myTransactions called", async () => {
 
                 var n = nextReady;
                 nextReady++;
 
                 await contractWithDelaysDone.connect(bobby).finishTransaction(n);
-                var [o1, i1] = await contractWithDelaysDone.connect(bobby).myTransactions();
+                var [, , , , , paid, ] = await contractWithDelaysDone.connect(bobby).myTransactions();
 
-                expect(o1.length).to.be.equal(nextId - 1024);
-                expect(o1[n - 1024]).to.be.equal(n);
+                expect(paid.length).to.be.equal(nextId - 1024);
+                expect(paid[n - 1024]).to.be.true;
 
             });
 

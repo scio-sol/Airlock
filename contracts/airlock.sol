@@ -68,43 +68,93 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
 
     }
 
-    function reverseTransaction(uint256 _id) public {
+    function reverseTransaction(uint256 id) public {
 
-        transaction memory t = transactions[_id];
+        transaction memory t = transactions[id];
 
         require(msg.sender == t.origin ||
                 msg.sender == t.destination, "Not autorized");
         require(block.timestamp < t.maturity, "Transaction has already reached maturity");
         require(!t.paid && !t.reversed, "Transaction was resolved already");
 
-        transactions[_id].reversed = true;
+        transactions[id].reversed = true;
 
         t.origin.transfer(t.amount);
 
     }
 
-    function finishTransaction(uint256 _id) public {
+    function finishTransaction(uint256 id) public {
 
-        transaction memory t = transactions[_id];
+        transaction memory t = transactions[id];
 
         require(msg.sender == t.origin ||
                 msg.sender == t.destination, "Not autorized");
         require(block.timestamp >= t.maturity, "Transaction has not yet reached maturity");
         require(!t.paid && !t.reversed, "Transaction was resolved already");
 
-        transactions[_id].paid = true;
+        transactions[id].paid = true;
 
         t.destination.transfer(t.amount);
 
     }
 
-    function myTransactions() public view returns (uint256[] memory, uint256[] memory) {
+    function myTransactions() public view
+        returns (
+            uint256[] memory id,
+            address[] memory origin,
+            address[] memory destination,
+            uint256[] memory maturity,
+            uint256[] memory amount,
+            bool[] memory paid,
+            bool[] memory reversed
+        )
+    {
 
-        return (idByOrigin[msg.sender], idByDestination[msg.sender]);
+        uint256 len = idByOrigin[msg.sender].length;
+        uint256 len2 = idByDestination[msg.sender].length;
+
+        id = new uint256[](len + len2);
+        origin = new address[](len + len2);
+        destination = new address[](len + len2);
+        maturity = new uint256[](len + len2);
+        amount = new uint256[](len + len2);
+        paid = new bool[](len + len2);
+        reversed = new bool[](len + len2);
+
+        for(uint256 i = 0; i < len; i++)
+        {
+            id[i] = idByOrigin[msg.sender][i];
+            origin[i] = (transactions[idByOrigin[msg.sender][i]].origin);
+            destination[i] = (transactions[idByOrigin[msg.sender][i]].destination);
+            maturity[i] = (transactions[idByOrigin[msg.sender][i]].maturity);
+            amount[i] = (transactions[idByOrigin[msg.sender][i]].amount);
+            paid[i] = (transactions[idByOrigin[msg.sender][i]].paid);
+            reversed[i] = (transactions[idByOrigin[msg.sender][i]].reversed);
+        }
+        for(uint256 i = 0; i < len2; i++)
+        {
+            id[i + len] = idByDestination[msg.sender][i];
+            origin[i + len] = (transactions[idByDestination[msg.sender][i]].origin);
+            destination[i + len] = (transactions[idByDestination[msg.sender][i]].destination);
+            maturity[i + len] = (transactions[idByDestination[msg.sender][i]].maturity);
+            amount[i + len] = (transactions[idByDestination[msg.sender][i]].amount);
+            paid[i + len] = (transactions[idByDestination[msg.sender][i]].paid);
+            reversed[i + len] = (transactions[idByDestination[msg.sender][i]].reversed);
+        }
+        
+        return (
+            id,
+            origin,
+            destination,
+            maturity,
+            amount,
+            paid,
+            reversed
+        );
 
     }
 
-    function getTransaction(uint256 _id) public view 
+    function getTransaction(uint256 id) public view 
         returns (
             address origin,
             address destination,
@@ -114,16 +164,16 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
             bool reversed
         )
     {
-        require(msg.sender == transactions[_id].origin || msg.sender == transactions[_id].destination,
+        require(msg.sender == transactions[id].origin || msg.sender == transactions[id].destination,
                 "Not authorized");
 
         return (
-            transactions[_id].origin,
-            transactions[_id].destination,
-            transactions[_id].maturity,
-            transactions[_id].amount,
-            transactions[_id].paid,
-            transactions[_id].reversed
+            transactions[id].origin,
+            transactions[id].destination,
+            transactions[id].maturity,
+            transactions[id].amount,
+            transactions[id].paid,
+            transactions[id].reversed
         );
     }
 
