@@ -12,13 +12,13 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
         bool reversed;
         address payable origin;
         address payable destination;
-        uint256 maturity;
+        uint96 maturity;
         uint256 amount;
     }
 
     uint256 private devMoney;
     uint256 public fee;
-    uint256 public delay;
+    uint96 public delay;
     uint256 private nonce;
     mapping ( address => uint256[] ) private idByOrigin;
     mapping ( address => uint256[] ) private idByDestination;
@@ -34,7 +34,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
         fee = _amount;
     }
 
-    function setDelay(uint256 _amount) external isDeveloper {
+    function setDelay(uint96 _amount) external isDeveloper {
         delay = _amount;
     }
 
@@ -59,7 +59,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
         transaction memory t;
         t.origin = payable(msg.sender);
         t.destination = _destination;
-        t.maturity = block.timestamp + delay;
+        t.maturity = uint96(block.timestamp) + delay;
         t.amount = msg.value - fee;
         transactions[nonce] = t;
 
@@ -70,13 +70,28 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
 
     }
 
+    function ammendDestination(uint256 id, address payable _destination) public {
+
+        transaction memory t = transactions[id];
+
+        require(msg.sender == t.origin, "Not autorized");
+        require(block.timestamp < t.maturity - (delay/2));
+        require(_destination != address(0), "It is not allowed to send transactions to address(0)");
+        require(_destination != msg.sender, "It is not allowed to send transactions with the sender as destination");
+        require(_destination != address(this), "It is not allowed to send transactions with this contract as destination");
+        require(!t.paid && !t.reversed, "Transaction was resolved already");
+
+        transactions[id].destination = _destination;
+
+    }
+
     function reverseTransaction(uint256 id) public {
 
         transaction memory t = transactions[id];
 
         require(msg.sender == t.origin ||
                 msg.sender == t.destination, "Not autorized");
-        require(block.timestamp < t.maturity, "Transaction has already reached maturity");
+        require(uint96(block.timestamp) < t.maturity, "Transaction has already reached maturity");
         require(!t.paid && !t.reversed, "Transaction was resolved already");
 
         transactions[id].reversed = true;
@@ -91,7 +106,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
 
         require(msg.sender == t.origin ||
                 msg.sender == t.destination, "Not autorized");
-        require(block.timestamp >= t.maturity, "Transaction has not yet reached maturity");
+        require(uint96(block.timestamp) >= t.maturity, "Transaction has not yet reached maturity");
         require(!t.paid && !t.reversed, "Transaction was resolved already");
 
         transactions[id].paid = true;
@@ -105,7 +120,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
             uint256[] memory id,
             address[] memory origin,
             address[] memory destination,
-            uint256[] memory maturity,
+            uint96[] memory maturity,
             uint256[] memory amount,
             bool[] memory paid,
             bool[] memory reversed
@@ -118,7 +133,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
         id = new uint256[](len + len2);
         origin = new address[](len + len2);
         destination = new address[](len + len2);
-        maturity = new uint256[](len + len2);
+        maturity = new uint96[](len + len2);
         amount = new uint256[](len + len2);
         paid = new bool[](len + len2);
         reversed = new bool[](len + len2);
@@ -160,7 +175,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
         returns (
             address origin,
             address destination,
-            uint256 maturity,
+            uint96 maturity,
             uint256 amount,
             bool paid,
             bool reversed

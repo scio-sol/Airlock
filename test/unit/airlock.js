@@ -248,6 +248,128 @@ describe("Airlock contract", async function() {
             });
         });
 
+        describe("Ammending transaction addresses", async () => {
+
+            it("Should ammend a transaction address when called as intended", async () => {
+
+                await contract.connect(bobby).createTransaction(alice.address, options);
+                
+                var contract_balance_before = await ethers.provider.getBalance(contract.address);
+                var bobby_balance_before = await ethers.provider.getBalance(bobby.address);
+                var alice_balance_before = await ethers.provider.getBalance(alice.address);
+                var devMoneyBefore = await contract.getDevMoney();
+                
+                var t = await contract.connect(bobby).getTransaction(1024);
+
+                await contract.connect(bobby).reverseTransaction(1024);
+
+                var contract_balance_after = await ethers.provider.getBalance(contract.address);
+                var bobby_balance_after = await ethers.provider.getBalance(bobby.address);
+                var alice_balance_after = await ethers.provider.getBalance(alice.address);
+                var devMoneyAfter = await contract.getDevMoney();
+
+                expect(contract_balance_after).to.be.equal(contract_balance_before.sub(t[3]));
+                expect(bobby_balance_after.sub(t[3])).to.be.closeTo(bobby_balance_before, ethers.constants.WeiPerEther.div(10));
+                expect(alice_balance_after).to.be.equal(alice_balance_before);
+                expect(devMoneyAfter).to.be.equal(devMoneyBefore);
+                
+            });
+
+            it("Should update the tx reversed boolean and nothing else in the struct", async () => {
+
+                await contract.connect(bobby).createTransaction(alice.address, options);
+                
+                var t = await contract.connect(bobby).getTransaction(1024);
+
+                await contract.connect(bobby).reverseTransaction(1024);
+
+                var t2 = await contract.connect(bobby).getTransaction(1024);
+
+                expect(t2[0]).to.be.equal(t[0]);
+                expect(t2[1]).to.be.equal(t[1]);
+                expect(t2[2]).to.be.equal(t[2]);
+                expect(t2[3]).to.be.equal(t[3]);
+                expect(t2[4]).to.be.equal(t[4]);
+
+                expect(t2[5]).to.be.true;
+                expect(t[5]).to.be.false;
+                
+            });
+
+            it("Should refuse to reverse a transaction when called by the sender after maturity", async () => {
+
+                var n = nextReady;
+                nextReady++;
+
+                await expect(contractWithDelaysDone.connect(bobby).reverseTransaction(n)).to.be.revertedWith("Transaction has already reached maturity");
+
+            });
+
+            it("Should reverse a transaction when called by the receiver", async () => {
+
+                await contract.connect(bobby).createTransaction(alice.address, options);
+
+                await expect(contract.connect(alice).reverseTransaction(1024)).to.not.be.reverted;
+
+            });
+
+            it("Should refuse to reverse a transaction when called by the sender after maturity", async () => {
+
+                var n = nextReady;
+                nextReady++;
+
+                await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.be.revertedWith("Transaction has already reached maturity");
+
+            });
+
+            it("Should refuse to reverse a transaction when called by other than sender or receiver", async () => {
+
+                await contract.connect(bobby).createTransaction(alice.address, options);
+
+                await expect(contract.connect(addrs[0]).reverseTransaction(1024)).to.be.revertedWith("Not autorized");
+            });
+
+            it("Should especially refuse to reverse a transaction when called by the developer", async () => {
+
+                await contract.connect(bobby).createTransaction(alice.address, options);
+
+                await expect(contract.reverseTransaction(1024)).to.be.revertedWith("Not autorized");
+
+            });
+
+            it("Should refuse to reverse a transaction when already reversed", async () => {
+
+                await contract.connect(bobby).createTransaction(alice.address, options);
+
+                await expect(contract.connect(bobby).reverseTransaction(1024)).to.not.be.reverted;
+                await expect(contract.connect(alice).reverseTransaction(1024)).to.be.reverted;
+
+            });
+
+            it("Should refuse to reverse a transaction when already finished", async () => {
+                
+                var n = nextReady;
+                nextReady++;
+
+                await expect(contractWithDelaysDone.connect(bobby).finishTransaction(n)).to.not.be.reverted;
+                await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.be.reverted;
+
+            });
+
+            it("Should still work with broken==true", async () => {
+
+                var newContract = await factory.deploy();
+
+                await newContract.connect(bobby).createTransaction(alice.address, options);
+
+                await newContract.setBroken();
+
+                await expect(newContract.connect(bobby).reverseTransaction(1024)).to.not.be.reverted;
+
+            });
+
+        });
+
         describe("Reversing transactions", async () => {
 
             it("Should reverse a transaction when called by the sender", async () => {
