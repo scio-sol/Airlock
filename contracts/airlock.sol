@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.3;
+pragma solidity ^0.8.6;
 
 import "./chainVersionsContract.sol";
 import "./restrictedAccessContract.sol";
@@ -8,12 +8,12 @@ import "./restrictedAccessContract.sol";
 contract Airlock is RestrictedAccessContract, ChainVersionsContract {
 
     struct transaction {
+        bool paid;
+        bool reversed;
         address payable origin;
         address payable destination;
         uint256 maturity;
         uint256 amount;
-        bool paid;
-        bool reversed;
     }
 
     uint256 private devMoney;
@@ -45,7 +45,7 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
     function retrieveDevMoney(uint256 _amount) external isDeveloper {
         require(_amount <= devMoney, "Not enough money");
         devMoney -= _amount;
-        msg.sender.transfer(_amount);
+        payable(msg.sender).transfer(_amount);
     }
 
     function createTransaction(address payable _destination) public payable {
@@ -56,11 +56,13 @@ contract Airlock is RestrictedAccessContract, ChainVersionsContract {
         require(_destination != msg.sender, "It is not allowed to send transactions with the sender as destination"); // Likely a mistake by the user
         require(_destination != address(this), "It is not allowed to send transactions with this contract as destination"); // No way to recover this funds
 
-        transaction storage t = transactions[nonce];
-        t.origin = msg.sender;
+        transaction memory t;
+        t.origin = payable(msg.sender);
         t.destination = _destination;
         t.maturity = block.timestamp + delay;
         t.amount = msg.value - fee;
+        transactions[nonce] = t;
+
         idByOrigin[msg.sender].push(nonce);
         idByDestination[_destination].push(nonce);
         devMoney += fee;
