@@ -149,7 +149,7 @@ describe("Airlock contract", async function() {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                var [ooo, iii] = await contract.connect(bobby).myTransactions();
+                var [ooo] = await contract.connect(bobby).myTransactions();
                 expect(ooo.length).to.equal(1);
                 expect(ooo[0]).to.equal(1024);
 
@@ -159,7 +159,7 @@ describe("Airlock contract", async function() {
                 await contract.connect(bobby).createTransaction(alice.address, options);
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                [ooo, iii] = await contract.connect(bobby).myTransactions();
+                [ooo] = await contract.connect(bobby).myTransactions();
                 expect(ooo.length).to.equal(4);
                 expect(ooo[0]).to.equal(1024);
                 expect(ooo[1]).to.equal(1025);
@@ -171,13 +171,15 @@ describe("Airlock contract", async function() {
             it("Should set all the internal data points correctly: origin, destination, amount, delay; paid & reversed should be false", async () => {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
-                var [origin, destination, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1024);
+                var [origin, destination, txDelay, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1024);
 
 
 
                 expect(origin).to.equal(bobby.address);
                 expect(destination).to.equal(alice.address);
 
+                var delay = await contract.delay();
+                expect(txDelay).to.equal(delay);
                 var block = await ethers.provider.getBlock();
                 expect(maturity).to.equal(block.timestamp + 24 * 3600);
 
@@ -218,7 +220,7 @@ describe("Airlock contract", async function() {
                 
                 var t = await contract.connect(bobby).getTransaction(1024);
 
-                expect(t[3]).to.equal(amount);
+                expect(t[4]).to.equal(amount);
 
             });
 
@@ -231,7 +233,7 @@ describe("Airlock contract", async function() {
                 bal = bal.sub(await contract.getDevMoney());
                 
                 var t = await contract.connect(bobby).getTransaction(1024);
-                bal = bal.sub(t[3]);
+                bal = bal.sub(t[4]);
                 
                 expect(bal).to.equal(0);
 
@@ -254,118 +256,91 @@ describe("Airlock contract", async function() {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
                 
-                var contract_balance_before = await ethers.provider.getBalance(contract.address);
-                var bobby_balance_before = await ethers.provider.getBalance(bobby.address);
-                var alice_balance_before = await ethers.provider.getBalance(alice.address);
-                var devMoneyBefore = await contract.getDevMoney();
-                
                 var t = await contract.connect(bobby).getTransaction(1024);
 
-                await contract.connect(bobby).reverseTransaction(1024);
-
-                var contract_balance_after = await ethers.provider.getBalance(contract.address);
-                var bobby_balance_after = await ethers.provider.getBalance(bobby.address);
-                var alice_balance_after = await ethers.provider.getBalance(alice.address);
-                var devMoneyAfter = await contract.getDevMoney();
-
-                expect(contract_balance_after).to.be.equal(contract_balance_before.sub(t[3]));
-                expect(bobby_balance_after.sub(t[3])).to.be.closeTo(bobby_balance_before, ethers.constants.WeiPerEther.div(10));
-                expect(alice_balance_after).to.be.equal(alice_balance_before);
-                expect(devMoneyAfter).to.be.equal(devMoneyBefore);
-                
-            });
-
-            it("Should update the tx reversed boolean and nothing else in the struct", async () => {
-
-                await contract.connect(bobby).createTransaction(alice.address, options);
-                
-                var t = await contract.connect(bobby).getTransaction(1024);
-
-                await contract.connect(bobby).reverseTransaction(1024);
+                await contract.connect(bobby).ammendDestination(1024, addrs[0].address);
 
                 var t2 = await contract.connect(bobby).getTransaction(1024);
 
                 expect(t2[0]).to.be.equal(t[0]);
-                expect(t2[1]).to.be.equal(t[1]);
+                expect(t2[1]).to.be.equal(addrs[0].address);
                 expect(t2[2]).to.be.equal(t[2]);
                 expect(t2[3]).to.be.equal(t[3]);
                 expect(t2[4]).to.be.equal(t[4]);
+                expect(t2[5]).to.be.equal(t[5]);
+                expect(t2[6]).to.be.equal(t[6]);
 
-                expect(t2[5]).to.be.true;
-                expect(t[5]).to.be.false;
+            });
+
+            it("Should not ammend when called by other than the original sender", async () => {
+
+                await contract.connect(bobby).createTransaction(alice.address, options);
+
+                await expect(contract.connect(addrs[0]).ammendDestination(1024, addrs[0].address)).to.be.reverted;
+
+                var t = await contract.connect(bobby).getTransaction(1024);
+
+                expect(t[1]).to.be.equal(alice.address);
+
+                await expect(contract.connect(alice).ammendDestination(1024, addrs[0].address)).to.be.reverted;
+
+                var t = await contract.connect(bobby).getTransaction(1024);
+
+                expect(t[1]).to.be.equal(alice.address);
+
+                await expect(contract.ammendDestination(1024, addrs[0].address)).to.be.reverted;
+
+                t = await contract.connect(bobby).getTransaction(1024);
+
+                expect(t[1]).to.be.equal(alice.address);
                 
             });
 
-            it("Should refuse to reverse a transaction when called by the sender after maturity", async () => {
+            it("Should not ammend when called after half maturity", async () => {
 
                 var n = nextReady;
                 nextReady++;
 
-                await expect(contractWithDelaysDone.connect(bobby).reverseTransaction(n)).to.be.revertedWith("Transaction has already reached maturity");
-
-            });
-
-            it("Should reverse a transaction when called by the receiver", async () => {
-
-                await contract.connect(bobby).createTransaction(alice.address, options);
-
-                await expect(contract.connect(alice).reverseTransaction(1024)).to.not.be.reverted;
-
-            });
-
-            it("Should refuse to reverse a transaction when called by the sender after maturity", async () => {
-
-                var n = nextReady;
-                nextReady++;
-
-                await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.be.revertedWith("Transaction has already reached maturity");
-
-            });
-
-            it("Should refuse to reverse a transaction when called by other than sender or receiver", async () => {
-
-                await contract.connect(bobby).createTransaction(alice.address, options);
-
-                await expect(contract.connect(addrs[0]).reverseTransaction(1024)).to.be.revertedWith("Not autorized");
-            });
-
-            it("Should especially refuse to reverse a transaction when called by the developer", async () => {
-
-                await contract.connect(bobby).createTransaction(alice.address, options);
-
-                await expect(contract.reverseTransaction(1024)).to.be.revertedWith("Not autorized");
-
-            });
-
-            it("Should refuse to reverse a transaction when already reversed", async () => {
-
-                await contract.connect(bobby).createTransaction(alice.address, options);
-
-                await expect(contract.connect(bobby).reverseTransaction(1024)).to.not.be.reverted;
-                await expect(contract.connect(alice).reverseTransaction(1024)).to.be.reverted;
-
-            });
-
-            it("Should refuse to reverse a transaction when already finished", async () => {
+                await expect(contractWithDelaysDone.connect(bobby).ammendDestination(n, addrs[0])).to.be.reverted;
                 
-                var n = nextReady;
-                nextReady++;
-
-                await expect(contractWithDelaysDone.connect(bobby).finishTransaction(n)).to.not.be.reverted;
-                await expect(contractWithDelaysDone.connect(alice).reverseTransaction(n)).to.be.reverted;
-
             });
 
-            it("Should still work with broken==true", async () => {
+            it("Should not ammend when called with wrong destination address", async () => {
 
-                var newContract = await factory.deploy();
+                await contract.connect(bobby).createTransaction(alice.address, options);
 
-                await newContract.connect(bobby).createTransaction(alice.address, options);
+                await expect(contract.connect(bobby).ammendDestination(1024, ethers.constants.AddressZero)).to.be.reverted;
+                await expect(contract.connect(bobby).ammendDestination(1024, contract.address)).to.be.reverted;
+                await expect(contract.connect(bobby).ammendDestination(1024, bobby.address)).to.be.reverted;
+                
+            });
 
-                await newContract.setBroken();
+            it("Should not ammend when called with wrong id", async () => {
 
-                await expect(newContract.connect(bobby).reverseTransaction(1024)).to.not.be.reverted;
+                await contract.connect(bobby).createTransaction(alice.address, options);
 
+                await expect(contract.connect(bobby).ammendDestination(1023, addrs[0].address)).to.be.reverted;
+                
+            });
+
+            it("Should not ammend when reversed", async () => {
+
+                await contract.connect(bobby).createTransaction(alice.address, options);
+                await contract.connect(bobby).reverseTransaction(1024);
+
+                await expect(contract.connect(bobby).ammendDestination(1024, addrs[0].address)).to.be.reverted;
+                
+            });
+
+            it("Should not be exploitable by calling setDelay", async () => {
+
+                await contract.connect(bobby).createTransaction(alice.address, options);
+                var v = await contract.delay();
+                await contract.setDelay(0);
+
+                var t = await contract.connect(bobby).getTransaction(1024);
+                expect(t.txDelay).to.be.equal(v);
+                
             });
 
         });
@@ -390,8 +365,8 @@ describe("Airlock contract", async function() {
                 var alice_balance_after = await ethers.provider.getBalance(alice.address);
                 var devMoneyAfter = await contract.getDevMoney();
 
-                expect(contract_balance_after).to.be.equal(contract_balance_before.sub(t[3]));
-                expect(bobby_balance_after.sub(t[3])).to.be.closeTo(bobby_balance_before, ethers.constants.WeiPerEther.div(10));
+                expect(contract_balance_after).to.be.equal(contract_balance_before.sub(t[4]));
+                expect(bobby_balance_after.sub(t[4])).to.be.closeTo(bobby_balance_before, ethers.constants.WeiPerEther.div(10));
                 expect(alice_balance_after).to.be.equal(alice_balance_before);
                 expect(devMoneyAfter).to.be.equal(devMoneyBefore);
                 
@@ -412,9 +387,10 @@ describe("Airlock contract", async function() {
                 expect(t2[2]).to.be.equal(t[2]);
                 expect(t2[3]).to.be.equal(t[3]);
                 expect(t2[4]).to.be.equal(t[4]);
+                expect(t2[5]).to.be.equal(t[5]);
 
-                expect(t2[5]).to.be.true;
-                expect(t[5]).to.be.false;
+                expect(t2[6]).to.be.true;
+                expect(t[6]).to.be.false;
                 
             });
 
@@ -513,9 +489,9 @@ describe("Airlock contract", async function() {
                 var alice_balance_after = await ethers.provider.getBalance(alice.address);
                 var devMoneyAfter = await contractWithDelaysDone.getDevMoney();
 
-                expect(contract_balance_after).to.be.equal(contract_balance_before.sub(t[3]));
+                expect(contract_balance_after).to.be.equal(contract_balance_before.sub(t[4]));
                 expect(bobby_balance_after).to.be.closeTo(bobby_balance_before, ethers.constants.WeiPerEther.div(10));
-                expect(alice_balance_after.sub(t[3])).to.be.equal(alice_balance_before);
+                expect(alice_balance_after.sub(t[4])).to.be.equal(alice_balance_before);
                 expect(devMoneyAfter).to.be.equal(devMoneyBefore);
 
             });
@@ -535,11 +511,12 @@ describe("Airlock contract", async function() {
                 expect(t2[1]).to.be.equal(t[1]);
                 expect(t2[2]).to.be.equal(t[2]);
                 expect(t2[3]).to.be.equal(t[3]);
+                expect(t2[4]).to.be.equal(t[4]);
 
-                expect(t2[4]).to.be.true;
-                expect(t[4]).to.be.false;
+                expect(t2[5]).to.be.true;
+                expect(t[5]).to.be.false;
 
-                expect(t2[5]).to.be.equal(t[4]);
+                expect(t2[6]).to.be.equal(t[6]);
 
             });
 
@@ -623,7 +600,7 @@ describe("Airlock contract", async function() {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                var [id, origin, destination, maturity, amount, paid, reversed] = await contract.connect(bobby).myTransactions();
+                var [id, origin, destination, txDelay, maturity, amount, paid, reversed] = await contract.connect(bobby).myTransactions();
 
                 expect(id).to.not.be.undefined;
                 expect(id.length).to.be.equal(1);
@@ -636,6 +613,11 @@ describe("Airlock contract", async function() {
                 expect(destination).to.not.be.undefined;
                 expect(destination.length).to.be.equal(1);
                 expect(destination[0]).to.be.equal(alice.address);
+
+                expect(txDelay).to.not.be.undefined;
+                expect(txDelay.length).to.be.equal(1);
+                var delay = await contract.delay();
+                expect(txDelay[0]).to.be.equal(delay);
 
                 expect(maturity).to.not.be.undefined;
                 expect(maturity.length).to.be.equal(1);
@@ -657,7 +639,7 @@ describe("Airlock contract", async function() {
                 await contract.connect(bobby).createTransaction(alice.address, options);
                 await contract.connect(alice).createTransaction(bobby.address, options);
 
-                [, origin, , , , , ] = await contract.connect(bobby).myTransactions();
+                [, origin] = await contract.connect(bobby).myTransactions();
 
                 expect(origin).to.not.be.undefined;
                 expect(origin.length).to.be.equal(3);
@@ -710,7 +692,7 @@ describe("Airlock contract", async function() {
                 await contract.connect(bobby).createTransaction(alice.address, options);
                 await expect(contract.connect(bobby).reverseTransaction(1024)).to.not.be.reverted;
 
-                var [, , , , , , reversed] = await contract.connect(bobby).myTransactions();
+                var [, , , , , , , reversed] = await contract.connect(bobby).myTransactions();
 
                 expect(reversed.length).to.be.equal(1);
                 expect(reversed[0]).to.be.true;
@@ -722,7 +704,7 @@ describe("Airlock contract", async function() {
                 var n = nextReady;
                 nextReady++;
 
-                var [, , , , , paid, reversed] = await contractWithDelaysDone.connect(bobby).myTransactions();
+                var [, , , , , , paid, reversed] = await contractWithDelaysDone.connect(bobby).myTransactions();
 
                 expect(paid.length).to.be.equal(nextId - 1024);
                 expect(paid[n - 1024]).to.be.false;
@@ -736,7 +718,7 @@ describe("Airlock contract", async function() {
                 nextReady++;
 
                 await contractWithDelaysDone.connect(bobby).finishTransaction(n);
-                var [, , , , , paid, ] = await contractWithDelaysDone.connect(bobby).myTransactions();
+                var [, , , , , , paid, ] = await contractWithDelaysDone.connect(bobby).myTransactions();
 
                 expect(paid.length).to.be.equal(nextId - 1024);
                 expect(paid[n - 1024]).to.be.true;
@@ -747,10 +729,12 @@ describe("Airlock contract", async function() {
 
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                var [origin, destination, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1024);
+                var [origin, destination, txDelay, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1024);
 
                 expect(origin).to.equal(bobby.address);
                 expect(destination).to.equal(alice.address);
+                var delay = await contract.delay();
+                expect(txDelay).to.equal(delay);
                 var block = await ethers.provider.getBlock();
                 expect(maturity).to.be.closeTo(ethers.BigNumber.from(24 * 3600).add(block.timestamp), 1000);
                 expect(amount).to.equal(options.value.sub(await contract.fee()));
@@ -759,10 +743,12 @@ describe("Airlock contract", async function() {
 
                 await contract.connect(bobby).createTransaction(addrs[0].address, options);
 
-                [origin, destination, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1025);
+                [origin, destination, txDelay, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1025);
 
                 expect(origin).to.equal(bobby.address);
                 expect(destination).to.equal(addrs[0].address);
+                delay = await contract.delay();
+                expect(txDelay).to.equal(delay);
                 block = await ethers.provider.getBlock();
                 expect(maturity).to.be.closeTo(ethers.BigNumber.from(24 * 3600).add(block.timestamp), 1000);
                 expect(amount).to.equal(options.value.sub(await contract.fee()));
@@ -775,10 +761,12 @@ describe("Airlock contract", async function() {
 
                 await contract.connect(bobby).createTransaction(alice.address,  options);
 
-                var [origin, destination, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1024);
+                var [origin, destination, txDelay, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1024);
 
                 expect(origin).to.equal(bobby.address);
                 expect(destination).to.equal(alice.address);
+                var delay = await contract.delay();
+                expect(txDelay).to.equal(delay);
                 var block = await ethers.provider.getBlock();
                 expect(maturity).to.be.closeTo(ethers.BigNumber.from(24 * 3600).add(block.timestamp), 1000);
                 expect(amount).to.equal(options.value.sub(await contract.fee()));
@@ -787,10 +775,12 @@ describe("Airlock contract", async function() {
 
                 await contract.connect(bobby).createTransaction(addrs[0].address, options);
 
-                [origin, destination, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1024);
+                [origin, destination, txDelay, maturity, amount, paid, reversed] = await contract.connect(bobby).getTransaction(1024);
 
                 expect(origin).to.equal(bobby.address);
                 expect(destination).to.equal(alice.address);
+                delay = await contract.delay();
+                expect(txDelay).to.equal(delay);
                 var block = await ethers.provider.getBlock();
                 expect(maturity).to.be.closeTo(ethers.BigNumber.from(24 * 3600).add(block.timestamp), 1000);
                 expect(amount).to.equal(options.value.sub(await contract.fee()));
@@ -803,10 +793,12 @@ describe("Airlock contract", async function() {
                 
                 await contract.connect(bobby).createTransaction(alice.address, options);
 
-                var [origin, destination, maturity, amount, paid, reversed] = await contract.connect(alice).getTransaction(1024);
+                var [origin, destination, txDelay, maturity, amount, paid, reversed] = await contract.connect(alice).getTransaction(1024);
 
                 expect(origin).to.equal(bobby.address);
                 expect(destination).to.equal(alice.address);
+                var delay = await contract.delay();
+                expect(txDelay).to.equal(delay);
                 var block = await ethers.provider.getBlock();
                 expect(maturity).to.be.closeTo(ethers.BigNumber.from(24 * 3600).add(block.timestamp), 1000);
                 expect(amount).to.equal(options.value.sub(await contract.fee()));
@@ -836,10 +828,12 @@ describe("Airlock contract", async function() {
                 await contract.connect(bobby).createTransaction(alice.address, options);
                 await contract.connect(bobby).reverseTransaction(1024);
 
-                var [origin, destination, maturity, amount, paid, reversed] = await contract.connect(alice).getTransaction(1024);
+                var [origin, destination, txDelay, maturity, amount, paid, reversed] = await contract.connect(alice).getTransaction(1024);
 
                 expect(origin).to.equal(bobby.address);
                 expect(destination).to.equal(alice.address);
+                var delay = await contract.delay();
+                expect(txDelay).to.equal(delay);
                 var block = await ethers.provider.getBlock();
                 expect(maturity).to.be.closeTo(ethers.BigNumber.from(24 * 3600).add(block.timestamp), 1000);
                 expect(amount).to.equal(options.value.sub(await contract.fee()));
@@ -853,10 +847,11 @@ describe("Airlock contract", async function() {
                 var n = nextReady;
                 nextReady++;
 
-                var [origin, destination, maturity, amount, paid, reversed] = await contractWithDelaysDone.connect(alice).getTransaction(n);
+                var [origin, destination, txDelay, maturity, amount, paid, reversed] = await contractWithDelaysDone.connect(alice).getTransaction(n);
 
                 expect(origin).to.equal(bobby.address);
                 expect(destination).to.equal(alice.address);
+                expect(txDelay).to.equal(0);
                 var block = await ethers.provider.getBlock();
                 expect(maturity).to.be.closeTo(ethers.BigNumber.from(2).add(block.timestamp), 1000);
                 expect(amount).to.equal(options.value.sub(await contractWithDelaysDone.fee()));
@@ -872,10 +867,11 @@ describe("Airlock contract", async function() {
 
                 await contractWithDelaysDone.connect(bobby).finishTransaction(n);
 
-                var [origin, destination, maturity, amount, paid, reversed] = await contractWithDelaysDone.connect(alice).getTransaction(n);
+                var [origin, destination, txDelay, maturity, amount, paid, reversed] = await contractWithDelaysDone.connect(alice).getTransaction(n);
 
                 expect(origin).to.equal(bobby.address);
                 expect(destination).to.equal(alice.address);
+                expect(txDelay).to.equal(0);
                 var block = await ethers.provider.getBlock();
                 expect(maturity).to.be.closeTo(ethers.BigNumber.from(2).add(block.timestamp), 1000);
                 expect(amount).to.equal(options.value.sub(await contractWithDelaysDone.fee()));
